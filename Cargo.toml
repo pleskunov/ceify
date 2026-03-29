@@ -1,0 +1,15 @@
+[package]
+name = "ceify"
+version = "0.1.0"
+edition = "2024"
+authors = ["Pavel Pleskunov"]
+description = "A lightweight tool for converting spectrophotometric intensity data into the spectral intensity format compatible with CompleteEASE."
+homepage = "https://github.com/pleskunov/ceify"
+keywords = ["converter", "formatter", "spectral-data", "spectrophotometry", "ellipsometry"]
+categories = ["optics", "science"]
+repository = "https://github.com/pleskunov/ceify"
+readme = "README.md"
+exclude = ["/ci/*", "/.github/*"]
+rust-version = "1.94"
+
+[dependencies]
