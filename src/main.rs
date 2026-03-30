@@ -143,8 +143,15 @@ impl Converter for Cary {
             if i < 2 {
                 continue;
             }
-            
-            let mut columns = line.split(',').map(|s| s.trim()).filter(|s| !s.is_empty());
+
+            // Skip empty lines
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            let mut columns = line.split(',')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty());
 
             let wr = columns.next();
             let rv = columns.next();
