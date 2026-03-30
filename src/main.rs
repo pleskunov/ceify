@@ -24,6 +24,8 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
 
+// Data representation
+
 struct SpectralData {
     wavelengths: Vec<f64>,
     values: Vec<f64>,
@@ -34,59 +36,82 @@ trait Converter {
     fn process(&self, path: &Path) -> io::Result<Vec<SpectralData>>;
 }
 
-// Lambda1050 Implementation
+// Internal helpers
+
+#[inline]
+fn normalize(value: f64) -> f64 {
+    value / 100.0
+}
+
+#[inline]
+fn parse_f64(s: &str, line: usize) -> io::Result<f64> {
+    s.parse::<f64>().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid float value '{}' at line {}: {}", s, line + 1, e)
+        )
+    })
+}
+
+// Implementation for Perkin Elmer Lambda 1050 instrument
 
 struct Lambda1050;
 
 impl Converter for Lambda1050 {
     fn process(&self, path: &Path) -> io::Result<Vec<SpectralData>> {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
+        let file: File = File::open(path)?;
+        let reader: BufReader<File> = BufReader::new(file);
 
-        let mut lines = reader.lines();
+        let mut kind: Option<String> = None;
+        let mut wavelengths: Vec<f64> = Vec::new();
+        let mut values: Vec<f64> = Vec::new();
 
-        // Step 1: detect type from line 85
-        let mut kind = None;
-        for (i, line) in lines.by_ref().enumerate() {
-            let line = line?;
+        for (i, line) in reader.lines().enumerate() {
+            let line: String = line?;
+
+            // Detect the spectrum type from line 85
             if i == 84 {
                 if line.contains("%T") {
                     kind = Some("uT".to_string());
                 } else if line.contains("%R") {
                     kind = Some("uR".to_string());
+                } else {
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "Missing %T/%R marker"));
                 }
-                break;
+            }
+
+            // Start reading the spectral data from line 95
+            if i >= 94 {
+                let mut columns = line.split_whitespace();
+
+                let w = columns.next();
+                let v = columns.next();
+
+                if columns.next().is_some() || w.is_none() || v.is_none() {
+                    return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("Malformed line {}: expected 2 columns", i + 1)
+                    ));
+                }
+
+                let wvl = parse_f64(w.unwrap().trim(), i)?;
+                let val = parse_f64(v.unwrap().trim(), i)?;
+
+                wavelengths.push(wvl);
+                values.push(normalize(val));
             }
         }
 
+        if wavelengths.is_empty() {
+            return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "No valid spectral data found"
+            ));
+        }
+        
         let kind = kind.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "Cannot detect %T or %R")
+            io::Error::new(io::ErrorKind::InvalidData, "Missing %T/%R marker")
         })?;
-
-        // Step 2: parse data from line 95
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
-
-        let mut wavelengths = Vec::new();
-        let mut values = Vec::new();
-
-        for (i, line) in reader.lines().enumerate() {
-            if i < 94 {
-                continue;
-            }
-
-            let line = line?;
-            let parts: Vec<_> = line.split_whitespace().collect();
-
-            if parts.len() != 2 {
-                continue;
-            }
-
-            if let (Ok(w), Ok(v)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
-                wavelengths.push(w);
-                values.push(v / 100.0);
-            }
-        }
 
         Ok(vec![SpectralData {
             wavelengths,
@@ -96,7 +121,7 @@ impl Converter for Lambda1050 {
     }
 }
 
-// Cary Implementation
+// Implementation for Agilent Cary instrument
 
 struct Cary;
 
@@ -113,31 +138,43 @@ impl Converter for Cary {
 
         for (i, line) in reader.lines().enumerate() {
             let line = line?;
-
+            
+            // Skip headers
             if i < 2 {
-                continue; // skip headers
-            }
-
-            let cols: Vec<_> = line.split(',').collect();
-
-            if cols.len() < 4 {
                 continue;
             }
 
-            let parse = |s: &str| s.trim().parse::<f64>().ok();
+            let mut columns = line.split(',');
 
-            if let (Some(wr), Some(rv), Some(wt), Some(tv)) = (
-                parse(cols[0]),
-                parse(cols[1]),
-                parse(cols[2]),
-                parse(cols[3]),
-            ) {
-                wavelengths_r.push(wr);
-                r.push(rv.abs() / 100.0);
+            let wr = columns.next();
+            let rv = columns.next();
+            let wt = columns.next();
+            let tv = columns.next();
 
-                wavelengths_t.push(wt);
-                t.push(tv.abs() / 100.0);
+            if columns.next().is_some() || wr.is_none() || rv.is_none() || wt.is_none() || tv.is_none() {
+                return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Malformed line {}: expected 4 columns", i + 1)
+                ));
             }
+
+            let wr = parse_f64(wr.unwrap().trim(), i)?;
+            let rv = parse_f64(rv.unwrap().trim(), i)?;
+            let wt = parse_f64(wt.unwrap().trim(), i)?;
+            let tv = parse_f64(tv.unwrap().trim(), i)?;
+
+            wavelengths_r.push(wr);
+            r.push(normalize(rv.abs()));
+
+            wavelengths_t.push(wt);
+            t.push(normalize(tv.abs()));
+        }
+
+        if wavelengths_r.is_empty() || wavelengths_t.is_empty() {
+            return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "No valid spectral data found"
+            ));
         }
 
         Ok(vec![
@@ -181,9 +218,9 @@ fn write_output(base: &Path, data: &SpectralData) -> io::Result<()> {
 
 // Format Detection
 fn detect_converter(path: &Path) -> Box<dyn Converter> {
-    match path.extension().and_then(|s| s.to_str()) {
-        Some("csv") => Box::new(Cary),
-        Some("asc") => Box::new(Lambda1050),
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case("csv") => Box::new(Cary),
+        Some(ext) if ext.eq_ignore_ascii_case("asc") => Box::new(Lambda1050),
         _ => {
             // fallback: assume txt-like
             Box::new(Lambda1050)

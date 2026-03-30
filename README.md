@@ -4,10 +4,10 @@ A small command-line utility for converting spectrophotometer output files into 
 
 ## Motivation
 
-This tool was created out of frustration with repeatedly converting spectral data files using Excel or ad hoc Python scripts. 
+This tool was created out of frustration with repeatedly converting spectral data files using Excel or small Python scripts. 
 The process was slow, error-prone, and inconvenient for routine work.
 
-The goal of `ceify` is to provide a simple, reliable, and drop-in solution that works directly from the command line without requiring external dependencies or manual intervention.
+`ceify` is intended to be a simple, reliable, drop-in replacement that performs the conversion directly from the command line with no external dependencies.
 
 ## What it does
 
@@ -15,10 +15,10 @@ The goal of `ceify` is to provide a simple, reliable, and drop-in solution that 
 
 Currently supported input formats:
 
-- PerkinElmer Lambda 1050 (ASC)
-- Agilent Cary (CSV)
+- PerkinElmer Lambda 1050 (`.asc`, `.txt`-like)
+- Agilent Cary (`.csv`)
 
-The program automatically detects the input format and produces one or more output files in the same directory.
+The program automatically detects the input format based on file extension and produces one or more output files in the same directory.
 
 ## Output format
 
@@ -51,17 +51,27 @@ ceify transmission_spectrum.asc
 ceify measurement.csv
 ```
 
-Output files will be created in the same directory as the input file.
+Output files are written to the same directory as the input file.
 
 ## Features
 
 - Single static binary, no dependencies
 - Works on Linux, macOS, and Windows
-- Automatic format detection
+- Automatic format detection (case-insensitive extensions)
+- Strict validation of input data
+- Clear error messages with line numbers
 - Handles both transmission and reflection data
-- Fast enough for typical lab datasets
-- Simple and predictable output
-- No need for Python, Excel, or manual editing
+- Simple and predictable output format
+
+## Behavior
+
+- Files are parsed in a single pass
+- Input data is validated strictly:
+  - Missing `%T` / `%R` markers (Lambda 1050) result in an error
+  - Malformed lines (wrong number of columns) result in an error
+  - Invalid numeric values result in an error with line number
+- Leading/trailing whitespace in values is ignored
+- Empty or invalid datasets are rejected
 
 ## Implementation
 
@@ -69,22 +79,24 @@ The program is written in Rust and uses only the standard library.
 
 ### Structure
 
-- A common data structure represents spectral datasets
-- A trait-based design is used to support multiple input formats
-- Each spectrophotometer format has its own parser
-- Output generation is shared across formats
+- `SpectralData` represents a single dataset (wavelength + values + type)
+- `Converter` trait defines a common interface for parsers
+- Separate implementations exist for each supported instrument:
+  - `Lambda1050`
+  - `Cary`
+- Output writing is shared across all formats
 
 ### Parsing
 
 - Lambda 1050:
-  - Detects `%T` or `%R` from header
-  - Reads data starting from a fixed line offset
-  - Normalizes values from percent to `[0, 1]`
+  - Detects `%T` or `%R` from a fixed header line
+  - Reads spectral data starting from a fixed offset
+  - Validates column count and numeric values
 
 - Cary:
-  - Parses CSV rows
-  - Extracts both reflection and transmission data
-  - Normalizes values and splits into two datasets
+  - Parses CSV rows without external libraries
+  - Extracts reflection and transmission data simultaneously
+  - Validates structure and numeric values for each row
 
 ### Output
 
@@ -92,9 +104,11 @@ The program is written in Rust and uses only the standard library.
 - Data is formatted with fixed precision
 - Output filenames are derived from the input filename
 
+Output files will be created in the same directory as the input file.
+
 ## Building
 
-Requires Rust (1.70+ should work, tested with newer versions).
+Requires Rust (1.90+ should work, tested with newer versions).
 
 ```
 cargo build --release
@@ -107,15 +121,8 @@ Binary will be located at:
 ## Limitations
 
 - Assumes consistent file structure from supported instruments
-- Limited validation of malformed input
-- No batch processing (yet)
-
-## Future improvements
-
-- Better format detection
-- Support for additional instruments
-- Batch directory processing
-- Configurable output formatting
+- CSV parsing is simplified (no quoted field handling)
+- No batch processing
 
 ## License
 
