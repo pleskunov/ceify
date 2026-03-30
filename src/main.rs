@@ -208,7 +208,7 @@ fn write_output(base: &Path, data: &SpectralData) -> io::Result<()> {
     writeln!(file, "nm")?;
 
     for (w, v) in data.wavelengths.iter().zip(&data.values) {
-        writeln!(file, "{:.2}\t{:.6}", w, v)?;
+        writeln!(file, "{:.2}\t{:.8}", w, v)?;
     }
 
     println!("Saved: {}", output_path.display());
