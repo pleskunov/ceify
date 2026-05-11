@@ -1,9 +1,44 @@
 import { Button } from "std-widgets.slint";
 
+component CeButton {
+    in property <string> text;
+    callback clicked();
+
+    min-width: 220px;
+    min-height: 36px;
+
+    Rectangle {
+        border-radius: 4px;
+        background: touch.pressed ? #2d4b68 : touch.has-hover ? #54779b: #3c5f84;
+
+        border-width: 1px;
+        border-color: #24384d;
+
+        Text {
+            text: root.text;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
 export component AppWindow inherits Window {
+
     title: "ceify";
     width: 800px;
-    height: 300px;
+    height: 320px;
+
+    background: #dfe3e8;
 
     in-out property <string> selected_file;
     in-out property <string> saved_to;
@@ -13,79 +48,112 @@ export component AppWindow inherits Window {
 
     VerticalLayout {
         spacing: 16px;
-        padding: 24px;
+        padding: 20px;
 
-        Text {
-            text: "ceify";
-            font-size: 28px;
-            horizontal-alignment: center;
-        }
+        Rectangle {
+            background: #eef1f4;
+            border-color: #9aa7b3;
+            border-width: 1px;
+            border-radius: 6px;
 
-        HorizontalLayout {
-            spacing: 12px;
-            
-            Text {
-                text: "Input:";
-                width: 80px;
-                vertical-alignment: center;
-            }
-
-            Rectangle {
-                border-width: 1px;
-                border-color: #808080;
-                height: 32px;
+            VerticalLayout {
+                spacing: 14px;
+                padding: 16px;
 
                 Text {
-                    text: selected_file;
-                    vertical-alignment: center;
+                    text: "ceify";
+                    font-size: 26px;
+                    font-weight: 700;
+                    color: #1f2a35;
+                    horizontal-alignment: center;
                 }
-            }
-        }
 
-        HorizontalLayout {
-            spacing: 12px;
+                HorizontalLayout {
+                    spacing: 12px;
 
-            Text {
-                text: "Output:";
-                width: 80px;
-                vertical-alignment: center;
-            }
+                    Text {
+                        text: "Input:";
+                        width: 70px;
+                        color: #1f2a35;
+                        vertical-alignment: center;
+                    }
 
-            Rectangle {
-                border-width: 1px;
-                border-color: #808080;
-                height: 32px;
+                    Rectangle {
+                        background: #f8f9fb;
+                        border-color: #9aa7b3;
+                        border-width: 1px;
+                        border-radius: 4px;
+                        min-height: 32px;
+
+                        Text {
+                            text: selected_file;
+                            color: #1f2a35;
+                            vertical-alignment: center;
+                            x: 8px;
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 12px;
+
+                    Text {
+                        text: "Output:";
+                        width: 70px;
+                        color: #1f2a35;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        background: #f8f9fb;
+                        border-color: #9aa7b3;
+                        border-width: 1px;
+                        border-radius: 4px;
+                        min-height: 48px;
+
+                        Text {
+                            text: saved_to;
+                            color: #1f2a35;
+                            vertical-alignment: center;
+                            wrap: word-wrap;
+                            x: 8px;
+                        }
+                    }
+                }
+                
+                HorizontalLayout {
+                    alignment: center;
+
+                    CeButton {
+                        text: "Select file and convert";
+
+                        clicked => {
+                            root.select_file();
+                        }
+                    }
+                }
+
+                Rectangle {
+                    background: #e7eaee;
+                    border-color: #b4bcc4;
+                    border-width: 1px;
+                    border-radius: 4px;
+                    min-height: 28px;
+
+                    Text {
+                        text: status_text;
+                        color: #506070;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
 
                 Text {
-                    text: saved_to;
-                    wrap: word-wrap;
-                    vertical-alignment: center;
+                    text: "Version: 1.0.0 (c) 2026 Pavel Pleskunov";
+                    color: #404040;
+                    horizontal-alignment: center;
                 }
             }
-        }
-
-        HorizontalLayout {
-            alignment: center;
-
-            Button {
-                text: "Select file and convert";
-
-                clicked => {
-                    root.select_file();
-                }
-            }
-        }
-
-        Text {
-            text: status_text;
-            color: #404040;
-            horizontal-alignment: center;
-        }
-
-         Text {
-            text: "Version: 1.0.0 (c) 2026 Pavel Pleskunov";
-            color: #404040;
-            horizontal-alignment: center;
         }
     }
 }
