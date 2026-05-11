@@ -23,16 +23,22 @@ export component AppWindow inherits Window {
 
         HorizontalLayout {
             spacing: 12px;
-
+            
             Text {
                 text: "Input:";
                 width: 80px;
                 vertical-alignment: center;
             }
 
-            TextInput {
-                text: selected_file;
-                read-only: true;
+            Rectangle {
+                border-width: 1px;
+                border-color: #808080;
+                height: 32px;
+
+                Text {
+                    text: selected_file;
+                    vertical-alignment: center;
+                }
             }
         }
 
@@ -45,9 +51,16 @@ export component AppWindow inherits Window {
                 vertical-alignment: center;
             }
 
-            TextInput {
-                text: saved_to;
-                read-only: true;
+            Rectangle {
+                border-width: 1px;
+                border-color: #808080;
+                height: 32px;
+
+                Text {
+                    text: saved_to;
+                    wrap: word-wrap;
+                    vertical-alignment: center;
+                }
             }
         }
 

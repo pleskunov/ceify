@@ -274,7 +274,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             Ok(datasets) => {
 
-                let mut last_output = String::new();
+                let mut outputs: Vec<String> = Vec::new();
 
                 for data in datasets {
 
@@ -288,11 +288,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                         return;
                     }
-
-                    last_output = output_filename(path, &data.kind);
+                    outputs.push(output_filename(path, &data.kind));
                 }
 
-                ui.set_saved_to(last_output.into());
+                ui.set_saved_to(outputs.join("\n").into());
 
                 ui.set_status_text("Success".into());
             }
