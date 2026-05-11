@@ -1,0 +1,72 @@
+import { Button } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    title: "ceify";
+    width: 800px;
+    height: 300px;
+
+    in-out property <string> selected_file;
+    in-out property <string> saved_to;
+    in-out property <string> status_text;
+
+    callback select_file();
+
+    VerticalLayout {
+        spacing: 16px;
+        padding: 24px;
+
+        Text {
+            text: "ceify";
+            font-size: 28px;
+            horizontal-alignment: center;
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+
+            Text {
+                text: "Input:";
+                width: 80px;
+                vertical-alignment: center;
+            }
+
+            TextInput {
+                text: selected_file;
+                read-only: true;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+
+            Text {
+                text: "Output:";
+                width: 80px;
+                vertical-alignment: center;
+            }
+
+            TextInput {
+                text: saved_to;
+                read-only: true;
+            }
+        }
+
+        HorizontalLayout {
+            alignment: center;
+
+            Button {
+                text: "Select file and convert";
+
+                clicked => {
+                    root.select_file();
+                }
+            }
+        }
+
+        Text {
+            text: status_text;
+            color: #404040;
+            horizontal-alignment: center;
+        }
+    }
+}

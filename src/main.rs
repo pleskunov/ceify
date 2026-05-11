@@ -19,6 +19,13 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 // USA
 
+// Prevent console window in addition to Slint window in Windows release builds when, e.g., starting the app via file manager. Ignored on other platforms.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use std::error::Error;
+
+slint::include_modules!();
+
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
@@ -51,6 +58,12 @@ fn parse_f64(s: &str, line: usize) -> io::Result<f64> {
             format!("Invalid float value '{}' at line {}: {}", s, line + 1, e)
         )
     })
+}
+
+#[inline]
+fn output_filename(base: &Path, kind: &str) -> String {
+    let stem = base.file_stem().unwrap().to_string_lossy();
+    format!("{}_{}.txt", stem, kind)
 }
 
 // Implementation for Perkin Elmer Lambda 1050 instrument
@@ -235,28 +248,68 @@ fn detect_converter(path: &Path) -> Box<dyn Converter> {
     }
 }
 
-fn main() -> io::Result<()> {
-    let args: Vec<String> = env::args().collect();
+fn main() -> Result<(), Box<dyn Error>> {
 
-    if args.len() != 2 {
-        eprintln!("Usage: ceify <input_file>");
-        std::process::exit(1);
-    }
+    let ui = AppWindow::new()?;
 
-    let input = Path::new(&args[1]);
+    let weak_ui = ui.as_weak();
 
-    if !input.exists() {
-        eprintln!("Error: file not found");
-        std::process::exit(1);
-    }
+    ui.on_select_file(move || {
 
-    let converter = detect_converter(input);
+        let Some(path_buf) = rfd::FileDialog::new()
+            .pick_file()
+        else {
+            return;
+        };
 
-    let datasets = converter.process(input)?;
+        let path = path_buf.as_path();
 
-    for data in datasets {
-        write_output(input, &data)?;
-    }
+        let ui = weak_ui.unwrap();
+
+        ui.set_selected_file(path.display().to_string().into());
+
+        let converter = detect_converter(path);
+
+        match converter.process(path) {
+
+            Ok(datasets) => {
+
+                let mut last_output = String::new();
+
+                for data in datasets {
+
+                    if let Err(e) = write_output(path, &data) {
+
+                        rfd::MessageDialog::new()
+                            .set_title("Write Error")
+                            .set_description(format!("{}", e))
+                            .set_level(rfd::MessageLevel::Error)
+                            .show();
+
+                        return;
+                    }
+
+                    last_output = output_filename(path, &data.kind);
+                }
+
+                ui.set_saved_to(last_output.into());
+
+                ui.set_status_text("Success".into());
+            }
+
+            Err(e) => {
+                ui.set_status_text("Conversion failed".into());
+
+                rfd::MessageDialog::new()
+                    .set_title("Conversion Error")
+                    .set_description(format!("{}", e))
+                    .set_level(rfd::MessageLevel::Error)
+                    .show();
+            }
+        }
+    });
+
+    ui.run()?;
 
     Ok(())
 }
