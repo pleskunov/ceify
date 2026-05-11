@@ -23,13 +23,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::error::Error;
+use std::io::{self, BufRead, Write};
 
 slint::include_modules!();
-
-use std::env;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
-use std::path::Path;
 
 // Data representation
 
@@ -40,29 +36,32 @@ struct SpectralData {
 }
 
 trait Converter {
-    fn process(&self, path: &Path) -> io::Result<Vec<SpectralData>>;
+    fn process(&self, path: &std::path::Path) -> std::io::Result<Vec<SpectralData>>;
 }
 
 // Internal helpers
 
-#[inline]
-fn normalize(value: f64) -> f64 {
+#[inline(always)]
+fn to_fraction(value: f64) -> f64 {
     value / 100.0
 }
 
 #[inline]
-fn parse_f64(s: &str, line: usize) -> io::Result<f64> {
+fn parse_f64(s: &str, line: usize) -> std::io::Result<f64> {
     s.parse::<f64>().map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
             format!("Invalid float value '{}' at line {}: {}", s, line + 1, e)
         )
     })
 }
 
 #[inline]
-fn output_filename(base: &Path, kind: &str) -> String {
-    let stem = base.file_stem().unwrap().to_string_lossy();
+fn output_filename(base: &std::path::Path, kind: &str) -> String {
+    let stem = base
+                            .file_stem()
+                            .unwrap()
+                            .to_string_lossy();
     format!("{}_{}.txt", stem, kind)
 }
 
@@ -71,16 +70,16 @@ fn output_filename(base: &Path, kind: &str) -> String {
 struct Lambda1050;
 
 impl Converter for Lambda1050 {
-    fn process(&self, path: &Path) -> io::Result<Vec<SpectralData>> {
-        let file: File = File::open(path)?;
-        let reader: BufReader<File> = BufReader::new(file);
+    fn process(&self, path: &std::path::Path) -> std::io::Result<Vec<SpectralData>> {
+        let file = std::fs::File::open(path)?;
+        let reader = std::io::BufReader::new(file);
 
         let mut kind: Option<String> = None;
-        let mut wavelengths: Vec<f64> = Vec::new();
-        let mut values: Vec<f64> = Vec::new();
+        let mut wavelengths = Vec::new();
+        let mut values = Vec::new();
 
         for (i, line) in reader.lines().enumerate() {
-            let line: String = line?;
+            let line = line?;
 
             // Detect the spectrum type from line 85
             if i == 84 {
@@ -89,7 +88,9 @@ impl Converter for Lambda1050 {
                 } else if line.contains("%R") {
                     kind = Some("uR".to_string());
                 } else {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "Missing %T/%R marker"));
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData, "Missing %T/%R marker."
+                    ));
                 }
             }
 
@@ -101,8 +102,8 @@ impl Converter for Lambda1050 {
                 let v = columns.next();
 
                 if columns.next().is_some() || w.is_none() || v.is_none() {
-                    return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
+                    return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
                             format!("Malformed line {}: expected 2 columns", i + 1)
                     ));
                 }
@@ -111,19 +112,19 @@ impl Converter for Lambda1050 {
                 let val = parse_f64(v.unwrap().trim(), i)?;
 
                 wavelengths.push(wvl);
-                values.push(normalize(val));
+                values.push(to_fraction(val));
             }
         }
 
         if wavelengths.is_empty() {
-            return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
+            return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
                     "No valid spectral data found"
             ));
         }
         
         let kind = kind.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "Missing %T/%R marker")
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing %T/%R marker")
         })?;
 
         Ok(vec![SpectralData {
@@ -139,9 +140,9 @@ impl Converter for Lambda1050 {
 struct Cary;
 
 impl Converter for Cary {
-    fn process(&self, path: &Path) -> io::Result<Vec<SpectralData>> {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
+    fn process(&self, path: &std::path::Path) -> std::io::Result<Vec<SpectralData>> {
+        let file = std::fs::File::open(path)?;
+        let reader = std::io::BufReader::new(file);
 
         let mut wavelengths_r = Vec::new();
         let mut r = Vec::new();
@@ -172,8 +173,8 @@ impl Converter for Cary {
             let tv = columns.next();
 
             if columns.next().is_some() || wr.is_none() || rv.is_none() || wt.is_none() || tv.is_none() {
-                return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
+                return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
                         format!("Malformed line {}: expected 4 columns", i + 1)
                 ));
             }
@@ -184,15 +185,15 @@ impl Converter for Cary {
             let tv = parse_f64(tv.unwrap().trim(), i)?;
 
             wavelengths_r.push(wr);
-            r.push(normalize(rv.abs()));
+            r.push(to_fraction(rv.abs()));
 
             wavelengths_t.push(wt);
-            t.push(normalize(tv.abs()));
+            t.push(to_fraction(tv.abs()));
         }
 
         if wavelengths_r.is_empty() || wavelengths_t.is_empty() {
-            return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
+            return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
                     "No valid spectral data found"
             ));
         }
@@ -214,14 +215,14 @@ impl Converter for Cary {
 
 
 // Writer
-fn write_output(base: &Path, data: &SpectralData) -> io::Result<()> {
+fn write_output(base: &std::path::Path, data: &SpectralData) -> io::Result<()> {
     let stem = base.file_stem().unwrap().to_string_lossy();
-    let parent = base.parent().unwrap_or(Path::new(""));
+    let parent = base.parent().unwrap_or(std::path::Path::new(""));
 
     let filename = format!("{}_{}.txt", stem, data.kind);
     let output_path = parent.join(filename);
 
-    let mut file = File::create(&output_path)?;
+    let mut file = std::fs::File::create(&output_path)?;
 
     writeln!(file, "Spectroscopic Intensity Data")?;
     writeln!(file, "{}", data.kind)?;
@@ -237,7 +238,7 @@ fn write_output(base: &Path, data: &SpectralData) -> io::Result<()> {
 }
 
 // Format Detection
-fn detect_converter(path: &Path) -> Box<dyn Converter> {
+fn detect_converter(path: &std::path::Path) -> Box<dyn Converter> {
     match path.extension().and_then(|ext| ext.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case("csv") => Box::new(Cary),
         Some(ext) if ext.eq_ignore_ascii_case("asc") => Box::new(Lambda1050),
@@ -249,11 +250,10 @@ fn detect_converter(path: &Path) -> Box<dyn Converter> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-
     let ui = AppWindow::new()?;
-
     let weak_ui = ui.as_weak();
 
+    // Connect to UI
     ui.on_select_file(move || {
 
         let Some(path_buf) = rfd::FileDialog::new()
