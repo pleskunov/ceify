@@ -139,80 +139,169 @@ impl Converter for Lambda1050 {
 
 struct Cary;
 
+#[derive(Debug, Clone, Copy)]
+enum CaryMode {
+    Dual,
+    ReflectanceOnly,
+    TransmittanceOnly
+}
+
 impl Converter for Cary {
     fn process(&self, path: &std::path::Path) -> std::io::Result<Vec<SpectralData>> {
         let file = std::fs::File::open(path)?;
-        let reader = std::io::BufReader::new(file);
+        let mut reader = std::io::BufReader::new(file);
+        let mut header = String::new();
 
-        let mut wavelengths_r = Vec::new();
-        let mut r = Vec::new();
+        // Skip the first line
+        reader.read_line(&mut header)?;
+        header.clear();
 
-        let mut wavelengths_t = Vec::new();
-        let mut t = Vec::new();
+        // Read the diagnostic header
+        reader.read_line(&mut header)?;
 
-        for (i, line) in reader.lines().enumerate() {
-            let line = line?;
-            
-            // Skip headers
-            if i < 2 {
-                continue;
-            }
-
-            // Skip empty lines
-            if line.trim().is_empty() {
-                continue;
-            }
-
-            let mut columns = line.split(',')
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty());
-
-            let wr = columns.next();
-            let rv = columns.next();
-            let wt = columns.next();
-            let tv = columns.next();
-
-            if columns.next().is_some() || wr.is_none() || rv.is_none() || wt.is_none() || tv.is_none() {
-                return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("Malformed line {}: expected 4 columns", i + 1)
-                ));
-            }
-
-            let wr = parse_f64(wr.unwrap().trim(), i)?;
-            let rv = parse_f64(rv.unwrap().trim(), i)?;
-            let wt = parse_f64(wt.unwrap().trim(), i)?;
-            let tv = parse_f64(tv.unwrap().trim(), i)?;
-
-            wavelengths_r.push(wr);
-            r.push(to_fraction(rv.abs()));
-
-            wavelengths_t.push(wt);
-            t.push(to_fraction(tv.abs()));
+        if cfg!(debug_assertions) {
+            println!("[DEBUG] Found diagnostic Cary header: {}", header);
         }
 
-        if wavelengths_r.is_empty() || wavelengths_t.is_empty() {
-            return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "No valid spectral data found"
-            ));
-        }
-
-        Ok(vec![
-            SpectralData {
-                wavelengths: wavelengths_r,
-                values: r,
-                kind: "uR".to_string(),
-            },
-            SpectralData {
-                wavelengths: wavelengths_t,
-                values: t,
-                kind: "uT".to_string(),
-            },
-        ])
+        let mode = detect_mode(&header)?;
+        match mode {
+            CaryMode::Dual => parse_dual(reader),
+            CaryMode::ReflectanceOnly => {
+                parse_single(reader, "uR")
+            }
+            CaryMode::TransmittanceOnly => {
+                parse_single(reader, "uT")
+            }
+         }
     }
 }
 
+fn detect_mode(header: &str) -> std::io::Result<CaryMode> {
+    let has_r = header.contains("%R");
+    let has_t = header.contains("%T");
+
+    match (has_r, has_t) {
+        (true, true) => Ok(CaryMode::Dual),
+        (true, false) => Ok(CaryMode::ReflectanceOnly),
+        (false, true) => Ok(CaryMode::TransmittanceOnly),
+        (false, false) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Unknown measurements mode.",
+        )),
+    }
+}
+
+fn parse_dual<R: BufRead>(reader: R) -> std::io::Result<Vec<SpectralData>> {
+    let mut wavelengths_r = Vec::new();
+    let mut r = Vec::new();
+
+    let mut wavelengths_t = Vec::new();
+    let mut t = Vec::new();
+
+    for (i, line) in reader.lines().enumerate() {
+        let line = line?;
+
+        // Skip empty lines
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let mut columns = line.split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty());
+
+        let wr = columns.next();
+        let rv = columns.next();
+        let wt = columns.next();
+        let tv = columns.next();
+
+        if columns.next().is_some() || wr.is_none() || rv.is_none() || wt.is_none() || tv.is_none() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Malformed line {}: expected 4 columns", i + 3)
+            ));
+        }
+
+        let wr = parse_f64(wr.unwrap().trim(), i)?;
+        let rv = parse_f64(rv.unwrap().trim(), i)?;
+        let wt = parse_f64(wt.unwrap().trim(), i)?;
+        let tv = parse_f64(tv.unwrap().trim(), i)?;
+
+        wavelengths_r.push(wr);
+        r.push(to_fraction(rv.abs()));
+
+        wavelengths_t.push(wt);
+        t.push(to_fraction(tv.abs()));
+    }
+
+    if wavelengths_r.is_empty() || wavelengths_t.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "No spectral data found."
+        ));
+    }
+
+    Ok(vec![
+        SpectralData {
+            wavelengths: wavelengths_r,
+            values: r,
+            kind: "uR".to_string(),
+        },
+        SpectralData {
+            wavelengths: wavelengths_t,
+            values: t,
+            kind: "uT".to_string(),
+        },
+    ])
+}
+
+fn parse_single<R: BufRead>(reader: R, kind: &'static str) -> std::io::Result<Vec<SpectralData>> {
+    let mut wavelengths = Vec::new();
+    let mut intensities = Vec::new();
+    
+    for (i, line) in reader.lines().enumerate() {
+        let line = line?;
+
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let mut columns = line.split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty());
+
+        let w = columns.next();
+        let v = columns.next();
+
+        if columns.next().is_some() || w.is_none() || v.is_none() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Malformed line {}: expected 2 columns", i + 3)
+            ));
+        }
+
+        let wavelength = parse_f64(w.unwrap().trim(), i)?;
+        let intensity = parse_f64(v.unwrap().trim(), i)?;
+
+        wavelengths.push(wavelength);
+        intensities.push(to_fraction(intensity.abs()));
+    }
+
+    if wavelengths.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "No spectral data found."
+        ));
+    }
+
+    Ok(vec![
+        SpectralData {
+            wavelengths,
+            values: intensities,
+            kind: kind.to_string(),
+        }
+    ])
+}
 
 // Writer
 fn write_output(base: &std::path::Path, data: &SpectralData) -> io::Result<()> {
@@ -232,7 +321,9 @@ fn write_output(base: &std::path::Path, data: &SpectralData) -> io::Result<()> {
         writeln!(file, "{:.2}\t{:.8}", w, v)?;
     }
 
-    println!("Saved: {}", output_path.display());
+    if cfg!(debug_assertions) {
+        println!("[DEBUG] Saved: {}", output_path.display());
+    }
 
     Ok(())
 }
