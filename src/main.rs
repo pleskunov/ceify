@@ -1,6 +1,6 @@
 // ceify 
 //
-// A small command-line utility for converting spectrophotometer output files into a format compatible with CompleteEASE.
+// A small utility for converting spectrophotometer data files into a format compatible with CompleteEASE.
 //
 // Copyright (c) 2026 Pavel Pleskunov.
 // 
@@ -19,7 +19,8 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 // USA
 
-// Prevent console window in addition to Slint window in Windows release builds when, e.g., starting the app via file manager. Ignored on other platforms.
+// Prevent console window in addition to Slint window in Windows release builds when, e.g., starting the app via file manager.
+// Ignored on other platforms.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::error::Error;
@@ -58,10 +59,9 @@ fn parse_f64(s: &str, line: usize) -> std::io::Result<f64> {
 
 #[inline]
 fn output_filename(base: &std::path::Path, kind: &str) -> String {
-    let stem = base
-                            .file_stem()
-                            .unwrap()
-                            .to_string_lossy();
+    let stem = base.file_stem()
+                                 .unwrap()
+                                 .to_string_lossy();
     format!("{}_{}.txt", stem, kind)
 }
 
