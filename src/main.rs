@@ -23,7 +23,6 @@
 // Ignored on other platforms.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::error::Error;
 use std::io::{self, BufRead, Write};
 
 slint::include_modules!();
@@ -52,7 +51,7 @@ fn parse_f64(s: &str, line: usize) -> std::io::Result<f64> {
     s.parse::<f64>().map_err(|e| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!("Invalid float value '{}' at line {}: {}", s, line + 1, e)
+            format!("Invalid float value '{}' at line {}: {}", s, line, e)
         )
     })
 }
@@ -108,8 +107,8 @@ impl Converter for Lambda1050 {
                     ));
                 }
 
-                let wvl = parse_f64(w.unwrap().trim(), i)?;
-                let val = parse_f64(v.unwrap().trim(), i)?;
+                let wvl = parse_f64(w.unwrap().trim(), i + 1)?;
+                let val = parse_f64(v.unwrap().trim(), i + 1)?;
 
                 wavelengths.push(wvl);
                 values.push(to_fraction(val));
@@ -222,10 +221,10 @@ fn parse_dual<R: BufRead>(reader: R) -> std::io::Result<Vec<SpectralData>> {
             ));
         }
 
-        let wr = parse_f64(wr.unwrap().trim(), i)?;
-        let rv = parse_f64(rv.unwrap().trim(), i)?;
-        let wt = parse_f64(wt.unwrap().trim(), i)?;
-        let tv = parse_f64(tv.unwrap().trim(), i)?;
+        let wr = parse_f64(wr.unwrap().trim(), i + 3)?;
+        let rv = parse_f64(rv.unwrap().trim(), i + 3)?;
+        let wt = parse_f64(wt.unwrap().trim(), i + 3)?;
+        let tv = parse_f64(tv.unwrap().trim(), i + 3)?;
 
         wavelengths_r.push(wr);
         r.push(to_fraction(rv.abs()));
@@ -280,8 +279,8 @@ fn parse_single<R: BufRead>(reader: R, kind: &'static str) -> std::io::Result<Ve
             ));
         }
 
-        let wavelength = parse_f64(w.unwrap().trim(), i)?;
-        let intensity = parse_f64(v.unwrap().trim(), i)?;
+        let wavelength = parse_f64(w.unwrap().trim(), i + 3)?;
+        let intensity = parse_f64(v.unwrap().trim(), i + 3)?;
 
         wavelengths.push(wavelength);
         intensities.push(to_fraction(intensity.abs()));
@@ -340,7 +339,7 @@ fn detect_converter(path: &std::path::Path) -> Box<dyn Converter> {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = AppWindow::new()?;
     let weak_ui = ui.as_weak();
 
