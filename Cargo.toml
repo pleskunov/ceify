@@ -22,3 +22,6 @@ slint-build = "1.16.1"
 [profile.release]
 codegen-units = 1
 lto = true
+
+[features]
+fast_fp_compare = []

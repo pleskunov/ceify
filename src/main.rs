@@ -23,6 +23,9 @@
 // Ignored on other platforms.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+pub mod correction_factors;
+pub mod config;
+
 use std::io::{self, BufRead, Write};
 
 slint::include_modules!();
@@ -64,6 +67,23 @@ fn output_filename(base: &std::path::Path, kind: &str) -> String {
     format!("{}_{}.txt", stem, kind)
 }
 
+#[allow(unused)]
+#[inline(always)]
+fn fast_approx_eq(a: f64, b: f64) -> bool {
+    ((a * config::FP_TOL_FACTOR).round() as i64) == ((b * config::FP_TOL_FACTOR).round() as i64)
+}
+
+#[inline(always)]
+fn precise_approx_eq(a: f64, b: f64) -> bool {
+    (a - b).abs() < config::FP_TOLERANCE
+}
+
+#[cfg(feature = "fast_fp_compare")]
+use fast_approx_eq as approx_eq;
+
+#[cfg(not(feature = "fast_fp_compare"))]
+use precise_approx_eq as approx_eq;
+
 // Implementation for Perkin Elmer Lambda 1050 instrument
 
 struct Lambda1050;
@@ -72,6 +92,7 @@ impl Converter for Lambda1050 {
     fn process(&self, path: &std::path::Path) -> std::io::Result<Vec<SpectralData>> {
         let file = std::fs::File::open(path)?;
         let reader = std::io::BufReader::new(file);
+        let mut is_reflectance: bool = false;
 
         let mut kind: Option<String> = None;
         let mut wavelengths = Vec::new();
@@ -86,6 +107,7 @@ impl Converter for Lambda1050 {
                     kind = Some("uT".to_string());
                 } else if line.contains("%R") {
                     kind = Some("uR".to_string());
+                    is_reflectance = true;
                 } else {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData, "Missing %T/%R marker."
@@ -111,7 +133,7 @@ impl Converter for Lambda1050 {
                 let val = parse_f64(v.unwrap().trim(), i + 1)?;
 
                 wavelengths.push(wvl);
-                values.push(to_fraction(val));
+                values.push(to_fraction(val.abs()));
             }
         }
 
@@ -125,6 +147,53 @@ impl Converter for Lambda1050 {
         let kind = kind.ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing %T/%R marker")
         })?;
+
+        let step_ok = wavelengths
+                            .windows(2)
+                            .all(|w| approx_eq(w[0] - w[1], 1.0f64));
+
+        if cfg!(debug_assertions) {
+            if step_ok {
+                println!("[DEBUG] Lambda 1050 step is OK");
+            } else {
+                println!("[DEBUG] Lambda 1050 step is not OK: {:.5}", wavelengths[0] - wavelengths[1]);
+            }
+        }
+
+        // Apply Spectralon correction to reflectance spectra aquired with 1.0 nm resolution
+        if is_reflectance && step_ok {
+            let ref_wvls = &correction_factors::SRS99010_WVLS;
+            let ref_cf = &correction_factors::SRS99010_CORR_FACTORS;
+
+            let ref_start = ref_wvls[0]; // 250.0
+            let ref_end = ref_wvls[ref_wvls.len() - 1]; // 2500.0
+
+            let mut corrected = values.clone();
+
+            // Iterate over the measured data by wavelength
+            for i in 0..wavelengths.len() {
+                let wl = wavelengths[i];
+
+                // Fast range rejection (cropped data handling)
+                if wl < ref_start || wl > ref_end {
+                    continue;
+                }
+
+                // Direct index mapping (requires step of 1.0 nm)
+                let idx = (wl - ref_start).round() as usize;
+
+                // Safety check to handle cropping or extension
+                if idx < ref_cf.len() {
+                    corrected[i] *= ref_cf[idx];
+                }
+            }
+
+            return Ok(vec![SpectralData {
+                wavelengths,
+                values: corrected,
+                kind,
+            }]);
+        }
 
         Ok(vec![SpectralData {
             wavelengths,
