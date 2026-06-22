@@ -188,16 +188,24 @@ impl Converter for Lambda1050 {
                 }
             }
 
+            // The data must be specified in ascending order
+            wavelengths.reverse();
+            corrected.reverse();
+
             return Ok(vec![SpectralData {
-                wavelengths,
+                wavelengths: wavelengths,
                 values: corrected,
                 kind,
             }]);
         }
 
+        // The data must be specified in ascending order
+        wavelengths.reverse();
+        values.reverse();
+
         Ok(vec![SpectralData {
-            wavelengths,
-            values,
+            wavelengths: wavelengths,
+            values: values,
             kind,
         }])
     }
