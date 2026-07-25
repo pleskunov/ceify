@@ -77,6 +77,8 @@ Output files are written to the same directory as the input file.
 
 The program is written in Rust and uses only the standard library.
 
+The graphical user interface is implemented using [Slint](https://slint.dev), a declarative GUI toolkit.
+
 ### Structure
 
 - `SpectralData` represents a single dataset (wavelength + values + type)
@@ -123,6 +125,14 @@ Binary will be located at:
 - Assumes consistent file structure from supported instruments
 - CSV parsing is simplified (no quoted field handling)
 - No batch processing
+
+## Acknowledgements
+
+The graphical interface of `ceify` is built with [Slint](https://slint.dev).
+
+Slint is licensed under the [GPLv3 License](https://slint.dev/terms-and-conditions#gplv3) for open-source projects.
+
+The "Made with Slint" logo is used in accordance with the Slint branding guidelines.
 
 ## License
 
