@@ -128,11 +128,11 @@ Binary will be located at:
 
 ## Acknowledgements
 
+![Slint](./logo/MadeWithSlint-logo-dark.svg)
+
 The graphical interface of `ceify` is built with [Slint](https://slint.dev).
 
 Slint is licensed under the [GPLv3 License](https://slint.dev/terms-and-conditions#gplv3) for open-source projects.
-
-The "Made with Slint" logo is used in accordance with the Slint branding guidelines.
 
 ## License
 
